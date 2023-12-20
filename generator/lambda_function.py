@@ -7,10 +7,9 @@ Created on Tue Nov 14 15:54:47 2023
 
 import boto3
 import json
-from os import environ
-import time
 import base64
 from PIL import Image
+from os import environ
 from io import BytesIO
 from datetime import datetime
 
@@ -217,11 +216,16 @@ def set_sqs_delay(delay_time):
     )
 
 def get_inference_endpoint_status(endpoint_name):
-    response = sagemaker_client.describe_endpoint(
-        EndpointName=endpoint_name
+    response = sagemaker_client.list_endpoints(
+        NameContains=endpoint_name,
     )
 
-    return response.get('EndpointStatus', None)
+    endpoints = response['Endpoints']
+    status = None
+    if len(endpoints) > 0:
+        status = endpoints[0]['EndpointStatus']
+
+    return status
 
 def lambda_handler(event, context):
     print("EVENT ", event)
@@ -275,7 +279,7 @@ def lambda_handler(event, context):
                     return {
                         "statusCode": 500,
                         "body" : response
-                        }
+                    }
                 else: # Remove from SQS
                     status="completed"
                     # delete_from_sqs(QUEUE_URL, ReceiptHandle)
@@ -283,10 +287,10 @@ def lambda_handler(event, context):
                     if messages_in_queue == 0:
                         status = 'empty'
                         update_service_status('queue', status)
-                    update_request_record(request_id,status, url)
+                    update_request_record(request_id,status, s3_key)
                     return {
                         'statusCode': 200,
-                        "body" : json.dumps({"Processed UUID": request_id})
+                        "body" : json.dumps({"Processed Request": request_id})
                     }
         
     except Exception as excp:
